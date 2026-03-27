@@ -26,12 +26,12 @@ jobs:
         
     - name: Build Linux binary
       run: |
-        GOOS=linux GOARCH=amd64 CGO_ENABLED=1 go build -o darytodo main.go
+        GOOS=linux GOARCH=amd64 CGO_ENABLED=1 go build -o daytodo main.go
         
     - name: Upload binary as artifact
       uses: actions/upload-artifact@v4
       with:
-        name: darytodo-linux-amd64
-        path: darytodo
+        name: daytodo-linux-amd64
+        path: daytodo
         retention-days: 30
         
