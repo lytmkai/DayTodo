@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,8 +17,8 @@ type Task struct {
 	ID          uint           `gorm:"primaryKey" json:"id"`
 	Title       string         `json:"title"`
 	IsDone      bool           `json:"is_done"`
-	Date        string         `gorm:"index" json:"date"`       // 任务所属日期 (用于每日重置逻辑)
-	CompletedAt *time.Time     `json:"completed_at"`            // 完成时间戳 (指针类型，未完成时为 nil)
+	Date        string         `gorm:"index" json:"date"`       // 任务所属日期
+	CompletedAt *time.Time     `json:"completed_at"`            // 完成时间戳
 	CreatedAt   time.Time      `json:"created_at"`
 }
 
@@ -27,20 +28,17 @@ var db *gorm.DB
 
 func InitDB() {
 	var err error
-	// 使用 sqlite 存储数据
 	db, err = gorm.Open(sqlite.Open("daytodo.db"), &gorm.Config{})
 	if err != nil {
 		panic("❌ 数据库连接失败")
 	}
-	
-	// 自动迁移表结构 (会自动添加新字段)
 	db.AutoMigrate(&Task{})
 	fmt.Println("✅ DayTodo 数据库已就绪")
 }
 
 // --- 3. 前端页面 (HTML/CSS/JS) ---
 
-// 使用 const 存储 HTML 模板，方便单文件运行
+// 注意：这里使用了反引号 ` 包裹，并且模板语法 {{ 变成了 \{\{ 进行转义
 const indexHTML = `
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -56,14 +54,12 @@ const indexHTML = `
         
         .card { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
         
-        /* 输入区域 */
         .input-group { display: flex; gap: 10px; margin-bottom: 25px; }
         input[type="text"] { flex: 1; padding: 12px; border: 2px solid #eee; border-radius: 8px; outline: none; transition: 0.3s; }
         input[type="text"]:focus { border-color: var(--primary); }
         .btn-add { padding: 12px 25px; background: var(--primary); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
         .btn-add:hover { background: #357abd; }
 
-        /* 任务列表 */
         ul { list-style: none; padding: 0; margin: 0; }
         li { display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid #f0f0f0; animation: fadeIn 0.3s ease; }
         li:last-child { border-bottom: none; }
@@ -73,7 +69,6 @@ const indexHTML = `
         .task-meta { font-size: 0.85em; color: #888; margin-top: 4px; display: block; }
         .completed-time { color: var(--success); font-weight: bold; }
 
-        /* 按钮 */
         .actions { display: flex; gap: 8px; }
         .btn { padding: 6px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9em; transition: 0.2s; }
         .btn-check { background: #e8f5e9; color: var(--success); }
@@ -81,11 +76,9 @@ const indexHTML = `
         .btn-del { background: #ffebee; color: var(--danger); }
         .btn-del:hover { background: var(--danger); color: white; }
 
-        /* 完成状态样式 */
         .is-done .task-title { text-decoration: line-through; color: #bdc3c7; }
         .is-done .btn-check { background: #bdc3c7; color: white; cursor: default; }
         
-        /* 历史查询 */
         .history-box { margin-top: 30px; padding-top: 20px; border-top: 2px solid #eee; }
         .history-header { display: flex; gap: 10px; margin-bottom: 15px; }
         .history-item { padding: 10px; background: #fafafa; border-radius: 6px; margin-bottom: 8px; display: flex; justify-content: space-between; }
@@ -95,36 +88,33 @@ const indexHTML = `
 </head>
 <body>
     <h1>DayTodo</h1>
-    <div class="subtitle">📅 {{ .Today }}</div>
+    <div class="subtitle">📅 \{\{ .Today \}\}</div>
 
     <div class="card">
-        <!-- 添加任务 -->
         <div class="input-group">
             <input type="text" id="titleInput" placeholder="今天要做些什么？" onkeypress="if(event.key==='Enter') addTask()">
             <button class="btn-add" onclick="addTask()">添加</button>
         </div>
 
-        <!-- 今日列表 -->
         <ul id="taskList">
-            {{ range .Tasks }}
-            <li class="{{ if .IsDone }}is-done{{ end }}">
+            \{\{ range .Tasks \}\}
+            <li class="\{\{ if .IsDone \}\}is-done\{\{ end \}\}">
                 <div class="task-content">
-                    <span class="task-title">{{ .Title }}</span>
-                    {{ if .IsDone }}
-                        <span class="task-meta">完成于: <span class="completed-time">{{ .CompletedAt.Format "15:04:05" }}</span></span>
-                    {{ else }}
+                    <span class="task-title">\{\{ .Title \}\}</span>
+                    \{\{ if .IsDone \}\}
+                        <span class="task-meta">完成于: <span class="completed-time">\{\{ .CompletedAt.Format "15:04:05" \}\}</span></span>
+                    \{\{ else \}\}
                         <span class="task-meta">待处理</span>
-                    {{ end }}
+                    \{\{ end \}\}
                 </div>
                 <div class="actions">
-                    <button class="btn btn-check" onclick="toggleTask({{ .ID }})">{{ if .IsDone }}已完{{ else }}完成{{ end }}</button>
-                    <button class="btn btn-del" onclick="deleteTask({{ .ID }})">删除</button>
+                    <button class="btn btn-check" onclick="toggleTask(\{\{ .ID \}\})">\{\{ if .IsDone \}\}已完\{\{ else \}\}完成\{\{ end \}\}</button>
+                    <button class="btn btn-del" onclick="deleteTask(\{\{ .ID \}\})">删除</button>
                 </div>
             </li>
-            {{ end }}
+            \{\{ end \}\}
         </ul>
 
-        <!-- 历史查询 -->
         <div class="history-box">
             <h3>🔍 历史复盘</h3>
             <div class="history-header">
@@ -136,7 +126,6 @@ const indexHTML = `
     </div>
 
     <script>
-        // 默认日期设为今天
         document.getElementById('historyDate').value = new Date().toISOString().split('T')[0];
 
         async function addTask() {
@@ -207,7 +196,6 @@ func main() {
 	r.GET("/", func(c *gin.Context) {
 		today := time.Now().Format("2006-01-02")
 		var tasks []Task
-		// 仅查询今日数据，按 ID 倒序排列
 		db.Where("date = ?", today).Order("id DESC").Find(&tasks)
 
 		c.HTML(http.StatusOK, "index.html", gin.H{
@@ -230,31 +218,25 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "success"})
 	})
 
-	// API: 切换状态 (核心逻辑：记录时间戳)
+	// API: 切换状态
 	r.POST("/api/tasks/:id/toggle", func(c *gin.Context) {
 		id := c.Param("id")
 		var task Task
 		
-		// 1. 查找任务
 		if err := db.First(&task, id).Error; err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "任务不存在"})
 			return
 		}
 
-		// 2. 翻转状态
 		task.IsDone = !task.IsDone
 
-		// 3. 处理时间戳
 		if task.IsDone {
-			// 如果标记为完成，记录当前时间
 			now := time.Now()
 			task.CompletedAt = &now
 		} else {
-			// 如果撤销完成，清空时间
 			task.CompletedAt = nil
 		}
 
-		// 4. 保存
 		db.Save(&task)
 		c.JSON(http.StatusOK, gin.H{"status": "updated", "completed_at": task.CompletedAt})
 	})
@@ -273,7 +255,6 @@ func main() {
 			return
 		}
 		var tasks []Task
-		// 查询指定日期的所有任务
 		db.Where("date = ?", date).Order("id DESC").Find(&tasks)
 		c.JSON(http.StatusOK, tasks)
 	})
@@ -281,6 +262,3 @@ func main() {
 	fmt.Println("🚀 DayTodo 服务已启动: http://localhost:8080")
 	r.Run(":8080")
 }
-
-// 引入 strings 包
-import "strings"
