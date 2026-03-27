@@ -46,6 +46,9 @@ func InitDB() {
 
 func main() {
 	InitDB()
+
+	gin.SetMode(gin.ReleaseMode)
+	
 	r := gin.Default()
 
 	// 加载嵌入的 HTML 模板
