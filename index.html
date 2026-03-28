@@ -6,8 +6,8 @@
     <title>DayTodo - 每日清单</title>
     <style>
         :root { --primary: #4a90e2; --success: #2ecc71; --danger: #e74c3c; --bg: #f5f7fa; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: #333; max-width: 600px; margin: 0 auto; padding: 0 20px; }
-        h1 { text-align: center; color: #2c3e50; margin-top: 0; margin-bottom: 5px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        h1 { text-align: center; color: #2c3e50; margin-bottom: 5px; }
         .subtitle { text-align: center; color: #7f8c8d; font-size: 0.9em; margin-bottom: 20px; }
         
         .card { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
@@ -49,16 +49,19 @@
     <div class="subtitle">📅 {{ .Today }}</div>
 
     <div class="card">
+        <!-- 添加任务模板 -->
         <div class="input-group">
-            <input type="text" id="titleInput" placeholder="今天要做些什么？" onkeypress="if(event.key==='Enter') addTask()">
-            <button class="btn-add" onclick="addTask()">添加</button>
+            <input type="text" id="titleInput" placeholder="添加常驻任务（如：每天喝水）..." onkeypress="if(event.key==='Enter') addTask()">
+            <button class="btn-add" onclick="addTask()">添加到清单</button>
         </div>
 
+        <!-- 今日任务列表 -->
         <ul id="taskList">
-            {{ range .Tasks }}
+            {{ range .Records }}
             <li class="{{ if .IsDone }}is-done{{ end }}">
                 <div class="task-content">
-                    <span class="task-title">{{ .Title }}</span>
+                    <!-- 注意这里取 .Task.Title -->
+                    <span class="task-title">{{ .Task.Title }}</span>
                     {{ if .IsDone }}
                         <span class="task-meta">完成于: <span class="completed-time">{{ .CompletedAt.Format "15:04:05" }}</span></span>
                     {{ else }}
@@ -66,13 +69,15 @@
                     {{ end }}
                 </div>
                 <div class="actions">
-                    <button class="btn btn-check" onclick="toggleTask({{ .ID }})">{{ if .IsDone }}已完{{ else }}完成{{ end }}</button>
-                    <button class="btn btn-del" onclick="deleteTask({{ .ID }})">删除</button>
+                    <button class="btn btn-check" onclick="toggleRecord({{ .ID }})">{{ if .IsDone }}已完{{ else }}完成{{ end }}</button>
+                    <!-- 这里的删除是指从今日列表中移除（软删除模板） -->
+                    <button class="btn btn-del" onclick="deleteTask({{ .Task.ID }})">删除</button>
                 </div>
             </li>
             {{ end }}
         </ul>
 
+        <!-- 历史查询 -->
         <div class="history-box">
             <h3>🔍 历史复盘</h3>
             <div class="history-header">
@@ -86,6 +91,7 @@
     <script>
         document.getElementById('historyDate').value = new Date().toISOString().split('T')[0];
 
+        // 添加任务模板
         async function addTask() {
             const input = document.getElementById('titleInput');
             const title = input.value.trim();
@@ -94,23 +100,26 @@
             await fetch('/api/tasks', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ title: title, date: new Date().toISOString().split('T')[0] })
+                body: JSON.stringify({ title: title })
             });
             input.value = '';
+            location.reload(); // 刷新页面以显示新生成的记录
+        }
+
+        // 标记完成（操作 Record）
+        async function toggleRecord(id) {
+            await fetch(`/api/records/${id}/toggle`, { method: 'POST' });
             location.reload();
         }
 
-        async function toggleTask(id) {
-            await fetch(`/api/tasks/${id}/toggle`, { method: 'POST' });
-            location.reload();
-        }
-
+        // 删除任务模板（操作 Task，软删除）
         async function deleteTask(id) {
-            if(!confirm('确定删除吗？')) return;
+            if(!confirm('确定从清单中删除此任务吗？明天它将不再出现。')) return;
             await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
             location.reload();
         }
 
+        // 查询历史
         async function queryHistory() {
             const date = document.getElementById('historyDate').value;
             const res = await fetch(`/api/history?date=${date}`);
@@ -123,14 +132,14 @@
             }
 
             let html = '';
-            data.forEach(task => {
-                const statusColor = task.is_done ? '#2ecc71' : '#e74c3c';
-                const statusText = task.is_done ? '✅ 已完成' : '⏳ 未完成';
-                const timeText = task.completed_at ? ` (${task.completed_at})` : '';
+            data.forEach(record => {
+                const statusColor = record.is_done ? '#2ecc71' : '#e74c3c';
+                const statusText = record.is_done ? '✅ 已完成' : '⏳ 未完成';
+                const timeText = record.completed_at ? ` (${record.completed_at})` : '';
                 
                 html += `
                 <div class="history-item">
-                    <span style="text-decoration: ${task.is_done ? 'line-through' : 'none'}; color: ${task.is_done ? '#888' : '#333'}">${task.title}</span>
+                    <span style="text-decoration: ${record.is_done ? 'line-through' : 'none'}; color: ${record.is_done ? '#888' : '#333'}">${record.task.title}</span>
                     <span style="color: ${statusColor}; font-size: 0.85em;">${statusText}${timeText}</span>
                 </div>`;
             });
