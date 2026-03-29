@@ -34,7 +34,7 @@
         
         .history-box { margin-top: 30px; padding-top: 20px; border-top: 2px solid #eee; }
         .history-header { display: flex; gap: 10px; margin-bottom: 15px; }
-        .history-item { padding: 10px; background: #fafafa; border-radius: 6px; margin-bottom: 8px; display: flex; justify-content: space-between; }
+        .history-item { padding: 10px; background: #fafafa; border-radius: 6px; margin-bottom: 8px; display: flex; justify-content: space-between; animation: fadeIn 0.5s ease; }
 
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
@@ -46,20 +46,19 @@
     <div class="card">
         <!-- 添加任务 -->
         <div class="input-group">
-            <input type="text" id="titleInput" placeholder="添加常驻任务（如：每天喝水）..." onkeypress="if(event.key==='Enter') addTask()">
+            <input type="text" id="titleInput" placeholder="添加常驻任务..." onkeypress="if(event.key==='Enter') addTask()">
             <button class="btn-add" onclick="addTask()">添加</button>
         </div>
 
         <!-- 任务列表 -->
         <ul id="taskList">
             {{ range .Tasks }}
-            <li>
+            <li id="task-row-{{ .ID }}">
                 <div class="task-content">
                     <span class="task-title">{{ .Title }}</span>
                 </div>
                 <div class="actions">
-                    <!-- 修改点：点击完成，触发打卡逻辑 -->
-                    <button class="btn btn-check" onclick="completeTask({{ .ID }})">打卡</button>
+                    <button class="btn btn-check" onclick="completeTask({{ .ID }}, '{{ .Title }}')">完成</button>
                     <button class="btn btn-del" onclick="deleteTask({{ .ID }})">删除</button>
                 </div>
             </li>
@@ -95,14 +94,35 @@
             location.reload();
         }
 
-        // 打卡完成
-        async function completeTask(id) {
-            // 调用新的打卡接口
+        // 完成并移动到历史
+        async function completeTask(id, title) {
             const res = await fetch(`/api/tasks/${id}/complete`, { method: 'POST' });
             if (res.ok) {
                 const data = await res.json();
-                alert(`✅ 任务已完成！时间: ${data.time}`);
-                // 这里不需要刷新列表，因为列表是“计划”，不会因为完成而消失
+                
+                // 1. 从任务列表中移除 (添加淡出效果)
+                const row = document.getElementById(`task-row-${id}`);
+                if (row) {
+                    row.style.opacity = '0';
+                    row.style.transform = 'translateX(20px)';
+                    row.style.transition = '0.3s';
+                    setTimeout(() => row.remove(), 300);
+                }
+
+                // 2. 添加到历史区域顶部
+                const historyContainer = document.getElementById('historyResult');
+                if (historyContainer.innerHTML.includes('无记录')) {
+                    historyContainer.innerHTML = '';
+                }
+                
+                const timeStr = data.time; // 从后端获取的时间
+                const html = `
+                <div class="history-item">
+                    <span style="text-decoration: line-through; color: #888;">${title}</span>
+                    <span style="color: #2ecc71; font-size: 0.85em;">✅ ${timeStr}</span>
+                </div>`;
+                
+                historyContainer.insertAdjacentHTML('afterbegin', html);
             }
         }
 
