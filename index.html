@@ -6,8 +6,8 @@
     <title>DayTodo - 每日清单</title>
     <style>
         :root { --primary: #4a90e2; --success: #2ecc71; --danger: #e74c3c; --bg: #f5f7fa; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
-        h1 { text-align: center; color: #2c3e50; margin-bottom: 5px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: #333; max-width: 600px; margin: 0 auto; padding: 0 20px; }
+        h1 { text-align: center; color: #2c3e50; margin: 0 5px; }
         .subtitle { text-align: center; color: #7f8c8d; font-size: 0.9em; margin-bottom: 20px; }
         
         .card { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
@@ -24,8 +24,6 @@
         
         .task-content { flex: 1; margin-left: 12px; }
         .task-title { font-size: 1.1em; display: block; }
-        .task-meta { font-size: 0.85em; color: #888; margin-top: 4px; display: block; }
-        .completed-time { color: var(--success); font-weight: bold; }
 
         .actions { display: flex; gap: 8px; }
         .btn { padding: 6px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9em; transition: 0.2s; }
@@ -33,9 +31,6 @@
         .btn-check:hover { background: var(--success); color: white; }
         .btn-del { background: #ffebee; color: var(--danger); }
         .btn-del:hover { background: var(--danger); color: white; }
-
-        .is-done .task-title { text-decoration: line-through; color: #bdc3c7; }
-        .is-done .btn-check { background: #bdc3c7; color: white; cursor: default; }
         
         .history-box { margin-top: 30px; padding-top: 20px; border-top: 2px solid #eee; }
         .history-header { display: flex; gap: 10px; margin-bottom: 15px; }
@@ -49,29 +44,23 @@
     <div class="subtitle">📅 {{ .Today }}</div>
 
     <div class="card">
-        <!-- 添加任务模板 -->
+        <!-- 添加任务 -->
         <div class="input-group">
             <input type="text" id="titleInput" placeholder="添加常驻任务（如：每天喝水）..." onkeypress="if(event.key==='Enter') addTask()">
-            <button class="btn-add" onclick="addTask()">添加到清单</button>
+            <button class="btn-add" onclick="addTask()">添加</button>
         </div>
 
-        <!-- 今日任务列表 -->
+        <!-- 任务列表 -->
         <ul id="taskList">
-            {{ range .Records }}
-            <li class="{{ if .IsDone }}is-done{{ end }}">
+            {{ range .Tasks }}
+            <li>
                 <div class="task-content">
-                    <!-- 注意这里取 .Task.Title -->
-                    <span class="task-title">{{ .Task.Title }}</span>
-                    {{ if .IsDone }}
-                        <span class="task-meta">完成于: <span class="completed-time">{{ .CompletedAt.Format "15:04:05" }}</span></span>
-                    {{ else }}
-                        <span class="task-meta">待处理</span>
-                    {{ end }}
+                    <span class="task-title">{{ .Title }}</span>
                 </div>
                 <div class="actions">
-                    <button class="btn btn-check" onclick="toggleRecord({{ .ID }})">{{ if .IsDone }}已完{{ else }}完成{{ end }}</button>
-                    <!-- 这里的删除是指从今日列表中移除（软删除模板） -->
-                    <button class="btn btn-del" onclick="deleteTask({{ .Task.ID }})">删除</button>
+                    <!-- 修改点：点击完成，触发打卡逻辑 -->
+                    <button class="btn btn-check" onclick="completeTask({{ .ID }})">打卡</button>
+                    <button class="btn btn-del" onclick="deleteTask({{ .ID }})">删除</button>
                 </div>
             </li>
             {{ end }}
@@ -91,7 +80,7 @@
     <script>
         document.getElementById('historyDate').value = new Date().toISOString().split('T')[0];
 
-        // 添加任务模板
+        // 添加任务
         async function addTask() {
             const input = document.getElementById('titleInput');
             const title = input.value.trim();
@@ -103,18 +92,23 @@
                 body: JSON.stringify({ title: title })
             });
             input.value = '';
-            location.reload(); // 刷新页面以显示新生成的记录
-        }
-
-        // 标记完成（操作 Record）
-        async function toggleRecord(id) {
-            await fetch(`/api/records/${id}/toggle`, { method: 'POST' });
             location.reload();
         }
 
-        // 删除任务模板（操作 Task，软删除）
+        // 打卡完成
+        async function completeTask(id) {
+            // 调用新的打卡接口
+            const res = await fetch(`/api/tasks/${id}/complete`, { method: 'POST' });
+            if (res.ok) {
+                const data = await res.json();
+                alert(`✅ 任务已完成！时间: ${data.time}`);
+                // 这里不需要刷新列表，因为列表是“计划”，不会因为完成而消失
+            }
+        }
+
+        // 删除任务
         async function deleteTask(id) {
-            if(!confirm('确定从清单中删除此任务吗？明天它将不再出现。')) return;
+            if(!confirm('确定删除此任务吗？')) return;
             await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
             location.reload();
         }
@@ -133,14 +127,11 @@
 
             let html = '';
             data.forEach(record => {
-                const statusColor = record.is_done ? '#2ecc71' : '#e74c3c';
-                const statusText = record.is_done ? '✅ 已完成' : '⏳ 未完成';
                 const timeText = record.completed_at ? ` (${record.completed_at})` : '';
-                
                 html += `
                 <div class="history-item">
-                    <span style="text-decoration: ${record.is_done ? 'line-through' : 'none'}; color: ${record.is_done ? '#888' : '#333'}">${record.task.title}</span>
-                    <span style="color: ${statusColor}; font-size: 0.85em;">${statusText}${timeText}</span>
+                    <span>${record.task.title}</span>
+                    <span style="color: #2ecc71; font-size: 0.85em;">✅ 已完成${timeText}</span>
                 </div>`;
             });
             container.innerHTML = html;
