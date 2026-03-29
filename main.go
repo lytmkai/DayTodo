@@ -60,13 +60,13 @@ func main() {
 
 	// 首页
 	r.GET("/", func(c *gin.Context) {
-		// 修改点：直接从 Task 表加载列表，不再依赖 Record 表
+		// 修改点：只查询未被删除的任务（即未完成的计划）
 		var tasks []Task
 		db.Where("is_deleted = ?", false).Order("id DESC").Find(&tasks)
 
 		c.HTML(http.StatusOK, "index", gin.H{
 			"Today": time.Now().Format("2006-01-02"),
-			"Tasks": tasks, // 传递任务列表
+			"Tasks": tasks,
 		})
 	})
 
@@ -80,7 +80,6 @@ func main() {
 			return
 		}
 
-		// 检查重复
 		var existingTask Task
 		if err := db.Where("title = ?", input.Title).First(&existingTask).Error; err == nil {
 			if existingTask.IsDeleted {
@@ -96,7 +95,7 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "success"})
 	})
 
-	// 标记完成 (核心逻辑修改点)
+	// 打卡完成 (核心逻辑修改)
 	r.POST("/api/tasks/:id/complete", func(c *gin.Context) {
 		id := c.Param("id")
 		var task Task
@@ -106,20 +105,28 @@ func main() {
 			return
 		}
 
-		// 修改点：点击完成时，才向 Record 表插入一条记录
+		// 1. 向 Record 表插入历史记录
 		now := time.Now()
 		record := Record{
 			TaskID:      task.ID,
-			Date:        now.Format("2006-01-02"), // 记录今天的日期
+			Date:        now.Format("2006-01-02"),
 			IsDone:      true,
 			CompletedAt: &now,
 		}
 		db.Create(&record)
 
-		c.JSON(http.StatusOK, gin.H{"status": "completed", "time": now.Format("15:04:05")})
+		// 2. 修改点：将 Task 标记为删除 (IsDeleted = true)
+		// 这样它下次刷新页面时，就不会出现在任务列表中了
+		db.Model(&task).Update("is_deleted", true)
+
+		c.JSON(http.StatusOK, gin.H{
+			"status": "completed", 
+			"time": now.Format("15:04:05"),
+			"record_id": record.ID, // 返回记录ID，方便前端直接渲染
+		})
 	})
 
-	// 软删除
+	// 软删除 (用户手动删除，不生成记录)
 	r.DELETE("/api/tasks/:id", func(c *gin.Context) {
 		db.Model(&Task{}).Where("id = ?", c.Param("id")).Update("is_deleted", true)
 		c.JSON(http.StatusOK, gin.H{"status": "deleted"})
@@ -132,7 +139,6 @@ func main() {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "日期不能为空"})
 			return
 		}
-		// 查询指定日期的完成记录
 		var records []Record
 		db.Preload("Task").Where("date = ?", date).Order("id ASC").Find(&records)
 		c.JSON(http.StatusOK, records)
