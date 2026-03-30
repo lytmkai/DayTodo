@@ -7,7 +7,7 @@
     <style>
         :root { --primary: #4a90e2; --success: #2ecc71; --danger: #e74c3c; --bg: #f5f7fa; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: #333; max-width: 600px; margin: 0 auto; padding: 0 20px; }
-        h1 { text-align: center; color: #2c3e50; margin: 0 5px; }
+        h1 { text-align: center; color: #2c3e50; margin: 5px; }
         .subtitle { text-align: center; color: #7f8c8d; font-size: 0.9em; margin-bottom: 20px; }
         
         .card { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
@@ -65,26 +65,40 @@
             {{ end }}
         </ul>
 
-        <!-- 历史查询 -->
+        <!-- 历史复盘 -->
         <div class="history-box">
-            <h3>🔍 历史复盘</h3>
-            <div class="history-header">
+            <h3>🔍 今日已完成</h3>
+            <!-- 逻辑点5: 页面加载时，下方直接显示今日完成的任务 -->
+            <div id="todayHistoryResult">
+                <!-- 这里的数据可以通过后端传参渲染，也可以通过JS加载 -->
+                <!-- 为了简化，这里我们只用JS加载，或者你可以像上面一样用模板渲染 -->
+                <!-- 由于后端只传了 pending tasks，我们需要通过JS去查一下今天的记录，或者直接让后端传过来 -->
+                <!-- 这里为了代码简洁，我们让后端把 TodayRecords 传过来，然后JS生成HTML -->
+            </div>
+            
+            <div class="history-header" style="margin-top: 20px; border-top: 1px dashed #eee; padding-top: 15px;">
+                <h4 style="margin: 0 10px 0 0;">查询往期:</h4>
                 <input type="date" id="historyDate">
-                <button class="btn-add" style="padding: 10px 20px;" onclick="queryHistory()">查询</button>
+                <button class="btn-add" style="padding: 8px 15px;" onclick="queryHistory()">查询</button>
             </div>
             <div id="historyResult"></div>
         </div>
     </div>
 
     <script>
+        // 初始化日期
         document.getElementById('historyDate').value = new Date().toISOString().split('T')[0];
 
-        // 添加任务
+        // 页面加载时，渲染今日已完成列表
+        // 这里我们复用 queryHistory 函数
+        window.onload = function() {
+            queryHistory();
+        };
+
         async function addTask() {
             const input = document.getElementById('titleInput');
             const title = input.value.trim();
             if (!title) return;
-
             await fetch('/api/tasks', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -94,13 +108,11 @@
             location.reload();
         }
 
-        // 完成并移动到历史
         async function completeTask(id, title) {
             const res = await fetch(`/api/tasks/${id}/complete`, { method: 'POST' });
             if (res.ok) {
                 const data = await res.json();
-                
-                // 1. 从任务列表中移除 (添加淡出效果)
+                // 1. 从上方列表移除
                 const row = document.getElementById(`task-row-${id}`);
                 if (row) {
                     row.style.opacity = '0';
@@ -108,40 +120,28 @@
                     row.style.transition = '0.3s';
                     setTimeout(() => row.remove(), 300);
                 }
-
-                // 2. 添加到历史区域顶部
-                const historyContainer = document.getElementById('historyResult');
-                if (historyContainer.innerHTML.includes('无记录')) {
-                    historyContainer.innerHTML = '';
-                }
-                
-                const timeStr = data.time; // 从后端获取的时间
-                const html = `
-                <div class="history-item">
-                    <span style="text-decoration: line-through; color: #888;">${title}</span>
-                    <span style="color: #2ecc71; font-size: 0.85em;">✅ ${timeStr}</span>
-                </div>`;
-                
-                historyContainer.insertAdjacentHTML('afterbegin', html);
+                // 2. 重新加载今日历史列表（因为多了一条记录）
+                queryHistory();
             }
         }
 
-        // 删除任务
         async function deleteTask(id) {
             if(!confirm('确定删除此任务吗？')) return;
             await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
             location.reload();
         }
 
-        // 查询历史
         async function queryHistory() {
             const date = document.getElementById('historyDate').value;
             const res = await fetch(`/api/history?date=${date}`);
             const data = await res.json();
             
-            const container = document.getElementById('historyResult');
+            // 如果是查询今天，更新上方的“今日已完成”区域
+            const today = new Date().toISOString().split('T')[0];
+            const targetContainer = date === today ? document.getElementById('todayHistoryResult') : document.getElementById('historyResult');
+
             if (data.length === 0) {
-                container.innerHTML = '<p style="text-align:center; color:#999;">该日期无记录</p>';
+                targetContainer.innerHTML = '<p style="text-align:center; color:#999; margin: 10px 0;">暂无记录</p>';
                 return;
             }
 
@@ -154,7 +154,7 @@
                     <span style="color: #2ecc71; font-size: 0.85em;">✅ 已完成${timeText}</span>
                 </div>`;
             });
-            container.innerHTML = html;
+            targetContainer.innerHTML = html;
         }
     </script>
 </body>
