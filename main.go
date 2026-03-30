@@ -17,7 +17,7 @@ import (
 type Task struct {
 	ID        uint   `gorm:"primaryKey" json:"id"`
 	Title     string `gorm:"uniqueIndex;not null" json:"title"`
-	IsDeleted bool   `gorm:"default:false" json:"is_deleted"`
+	IsDeleted bool   `gorm:"default:false" json:"is_deleted"` // 仅用于管理任务模板（彻底废弃的任务）
 }
 
 type Record struct {
@@ -60,17 +60,39 @@ func main() {
 
 	// 首页
 	r.GET("/", func(c *gin.Context) {
-		// 修改点：只查询未被删除的任务（即未完成的计划）
-		var tasks []Task
-		db.Where("is_deleted = ?", false).Order("id DESC").Find(&tasks)
+		today := time.Now().Format("2006-01-02")
+
+		// 逻辑点1: 获取所有未被“废弃”的任务模板
+		var allTasks []Task
+		db.Where("is_deleted = ?", false).Find(&allTasks)
+
+		// 逻辑点2: 获取今日已完成的记录
+		var todayDoneIDs []uint
+		db.Model(&Record{}).Where("date = ? AND is_done = ?", today, true).Pluck("task_id", &todayDoneIDs)
+
+		// 逻辑点3: 过滤掉今日已完成的任务，只保留未完成的显示在列表中
+		var pendingTasks []Task
+		for _, t := range allTasks {
+			isDone := false
+			for _, doneID := range todayDoneIDs {
+				if t.ID == doneID {
+					isDone = true
+					break
+				}
+			}
+			if !isDone {
+				pendingTasks = append(pendingTasks, t)
+			}
+		}
 
 		c.HTML(http.StatusOK, "index", gin.H{
-			"Today": time.Now().Format("2006-01-02"),
-			"Tasks": tasks,
+			"Today":        today,
+			"Tasks":        pendingTasks, // 只传未完成的任务
+			"TodayRecords": todayDoneIDs, // 传递给前端用于高亮或逻辑判断（可选）
 		})
 	})
 
-	// 添加新任务
+	// 添加新任务模板
 	r.POST("/api/tasks", func(c *gin.Context) {
 		var input struct {
 			Title string `json:"title"`
@@ -95,7 +117,7 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "success"})
 	})
 
-	// 打卡完成 (核心逻辑修改)
+	// 打卡完成
 	r.POST("/api/tasks/:id/complete", func(c *gin.Context) {
 		id := c.Param("id")
 		var task Task
@@ -105,7 +127,7 @@ func main() {
 			return
 		}
 
-		// 1. 向 Record 表插入历史记录
+		// 逻辑点4: 点击完成时，仅向 records 表插入数据
 		now := time.Now()
 		record := Record{
 			TaskID:      task.ID,
@@ -115,18 +137,13 @@ func main() {
 		}
 		db.Create(&record)
 
-		// 2. 修改点：将 Task 标记为删除 (IsDeleted = true)
-		// 这样它下次刷新页面时，就不会出现在任务列表中了
-		db.Model(&task).Update("is_deleted", true)
-
 		c.JSON(http.StatusOK, gin.H{
-			"status": "completed", 
-			"time": now.Format("15:04:05"),
-			"record_id": record.ID, // 返回记录ID，方便前端直接渲染
+			"status": "completed",
+			"time":   now.Format("15:04:05"),
 		})
 	})
 
-	// 软删除 (用户手动删除，不生成记录)
+	// 删除任务模板（彻底废弃）
 	r.DELETE("/api/tasks/:id", func(c *gin.Context) {
 		db.Model(&Task{}).Where("id = ?", c.Param("id")).Update("is_deleted", true)
 		c.JSON(http.StatusOK, gin.H{"status": "deleted"})
