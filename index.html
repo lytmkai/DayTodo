@@ -68,13 +68,7 @@
         <!-- 历史复盘 -->
         <div class="history-box">
             <h3>🔍 今日已完成</h3>
-            <!-- 逻辑点5: 页面加载时，下方直接显示今日完成的任务 -->
-            <div id="todayHistoryResult">
-                <!-- 这里的数据可以通过后端传参渲染，也可以通过JS加载 -->
-                <!-- 为了简化，这里我们只用JS加载，或者你可以像上面一样用模板渲染 -->
-                <!-- 由于后端只传了 pending tasks，我们需要通过JS去查一下今天的记录，或者直接让后端传过来 -->
-                <!-- 这里为了代码简洁，我们让后端把 TodayRecords 传过来，然后JS生成HTML -->
-            </div>
+            <!-- 移除todayHistoryResult，现在统一在historyResult中显示 -->
             
             <div class="history-header" style="margin-top: 20px; border-top: 1px dashed #eee; padding-top: 15px;">
                 <h4 style="margin: 0 10px 0 0;">查询往期:</h4>
@@ -90,9 +84,8 @@
         document.getElementById('historyDate').value = new Date().toISOString().split('T')[0];
 
         // 页面加载时，渲染今日已完成列表
-        // 这里我们复用 queryHistory 函数
         window.onload = function() {
-            queryHistory();
+            queryHistory(); // 加载今日历史
         };
 
         async function addTask() {
@@ -120,7 +113,8 @@
                     row.style.transition = '0.3s';
                     setTimeout(() => row.remove(), 300);
                 }
-                // 2. 重新加载今日历史列表（因为多了一条记录）
+                
+                // 2. 触发一次今日历史查询，更新historyResult
                 queryHistory();
             }
         }
@@ -136,9 +130,8 @@
             const res = await fetch(`/api/history?date=${date}`);
             const data = await res.json();
             
-            // 如果是查询今天，更新上方的“今日已完成”区域
-            const today = new Date().toISOString().split('T')[0];
-            const targetContainer = date === today ? document.getElementById('todayHistoryResult') : document.getElementById('historyResult');
+            // 统一在historyResult中显示所有历史记录
+            const targetContainer = document.getElementById('historyResult');
 
             if (data.length === 0) {
                 targetContainer.innerHTML = '<p style="text-align:center; color:#999; margin: 10px 0;">暂无记录</p>';
@@ -147,7 +140,7 @@
 
             let html = '';
             data.forEach(record => {
-                const timeText = record.completed_at ? ` (${record.completed_at})` : '';
+                const timeText = record.completed_at ? ` (${new Date(record.completed_at).toLocaleTimeString()})` : '';
                 html += `
                 <div class="history-item">
                     <span>${record.task.title}</span>
