@@ -60,9 +60,10 @@ func main() {
 
 	// 首页
 	r.GET("/", func(c *gin.Context) {
-		today := time.Now().Format("2006-01-02")
+		// 修复时区问题：获取本地时间
+		today := time.Now().In(time.Local).Format("2006-01-02")
 
-		// 逻辑点1: 获取所有未被“废弃”的任务模板
+		// 逻辑点1: 获取所有未被"废弃"的任务模板
 		var allTasks []Task
 		db.Where("is_deleted = ?", false).Find(&allTasks)
 
@@ -127,8 +128,8 @@ func main() {
 			return
 		}
 
-		// 逻辑点4: 点击完成时，仅向 records 表插入数据
-		now := time.Now()
+		// 修复时区问题：使用本地时间
+		now := time.Now().In(time.Local)
 		record := Record{
 			TaskID:      task.ID,
 			Date:        now.Format("2006-01-02"),
