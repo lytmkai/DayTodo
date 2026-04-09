@@ -81,7 +81,16 @@
 
     <script>
         // 初始化日期
-        document.getElementById('historyDate').value = new Date().toISOString().split('T')[0];
+
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+
+        const dateStr = `${year}-${month}-${day}`;
+        
+        
+        document.getElementById('historyDate').value = dateStr;
 
         // 页面加载时，渲染今日已完成列表
         window.onload = function() {
